@@ -22,12 +22,12 @@ jobs:
           bash tests/test_scan_patterns.sh
           bash tests/test_frontmatter.sh
 
-      - name: Build .skill bundle
-        run: bash skills/security-review/scripts/build-skill.sh
-
       - name: Extract version from tag
         id: version
         run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Build .skill bundle
+        run: bash skills/security-review/scripts/build-skill.sh --version=${{ steps.version.outputs.version }}
 
       - name: Extract changelog entry for this version
         id: changelog
