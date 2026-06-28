@@ -1,0 +1,7 @@
+# Files excluded from the .skill bundle distributed to harnesses.
+# Tests and fixtures are dev-time only; the skill runtime doesn't need them.
+tests/
+fixtures/
+*.sh.bak
+*.swp
+.DS_Store
