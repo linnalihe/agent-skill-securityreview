@@ -1,0 +1,24 @@
+{
+  "name": "agent-skill-securityreview",
+  "owner": {
+    "name": "linnalihe",
+    "url": "https://github.com/linnalihe"
+  },
+  "metadata": {
+    "description": "Marketplace hosting the security-review skill."
+  },
+  "plugins": [
+    {
+      "name": "security-review",
+      "description": "OWASP Top 10:2025 security review for pull requests and codebases. Finds vulnerabilities, explains exploitability in plain language, and proposes concrete fixes.",
+      "version": "1.0.0",
+      "author": {
+        "name": "linnalihe",
+        "url": "https://github.com/linnalihe"
+      },
+      "source": "./",
+      "category": "security",
+      "homepage": "https://github.com/linnalihe/agent-skill-securityreview"
+    }
+  ]
+}
