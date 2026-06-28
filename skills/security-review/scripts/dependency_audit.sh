@@ -86,7 +86,11 @@ if [ -f "$TARGET/requirements.txt" ] || [ -f "$TARGET/pyproject.toml" ] || [ -f 
     tool_missing "Python" "pip-audit" "pip install pip-audit"
   fi
 
-  if [ -f "$TARGET/requirements.txt" ] && grep -qvE '==' "$TARGET/requirements.txt" 2>/dev/null; then
+  # Strip comment lines, blank lines, and option directives (-r, -c, --extra-index-url)
+  # before checking for unpinned versions. Plain `grep -qvE '=='` fires on any blank line
+  # or comment, producing a false positive on every well-formed requirements.txt.
+  if [ -f "$TARGET/requirements.txt" ] && \
+     grep -v '^\s*#' "$TARGET/requirements.txt" | grep -v '^\s*$' | grep -v '^\s*-' | grep -qvE '=='; then
     echo "FINDING (A03): requirements.txt has unpinned versions - pin exact versions for reproducible, auditable builds."
   fi
   echo ""

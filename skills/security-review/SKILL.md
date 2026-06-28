@@ -18,7 +18,10 @@ Before reading anything else in this file, check whether you loaded SKILL.md fro
 **Run this check:**
 
 ```bash
-SKILL_CACHE_LATEST=$(find "$HOME/.claude/plugins/cache/agent-skill-securityreview/security-review" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | sort -V | tail -1)
+# sort -V (version sort) is GNU-only. macOS BSD sort silently falls back to lexicographic
+# order, which breaks between e.g. 1.0.9 and 1.0.10. Use sort -t. -k1,1n -k2,2n -k3,3n
+# as a portable numeric alternative that works on both GNU and BSD sort.
+SKILL_CACHE_LATEST=$(find "$HOME/.claude/plugins/cache/agent-skill-securityreview/security-review" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | sort -t. -k1,1n -k2,2n -k3,3n | tail -1)
 SKILL_CACHE_MD=""
 if [ -n "$SKILL_CACHE_LATEST" ]; then
   if [ -f "$SKILL_CACHE_LATEST/skills/security-review/SKILL.md" ]; then
@@ -239,11 +242,17 @@ Before reading line-by-line, map changed or in-scope files to likely OWASP categ
 bash "$SKILL_DIR/scripts/scan_patterns.sh" . <changed-file-1> <changed-file-2> ...
 ```
 
-**For Mode B (full audit):**
+**For Mode B (full audit):** run in two passes. First a summary triage to see which categories have hits, then the full scan to read the actual lines:
 
 ```bash
+# Pass 1: triage — see which categories have hits before reading thousands of lines
+bash "$SKILL_DIR/scripts/scan_patterns.sh" --emit=summary <repo-root>
+
+# Pass 2: full scan — read the actual hits for every category that had >0 hits in pass 1
 bash "$SKILL_DIR/scripts/scan_patterns.sh" <repo-root>
 ```
+
+If the triage pass shows zero hits for a category, you can skip the full-scan output for that category and go straight to the reasoning pass (Step 7). If it shows many hits (>20 in a single category), prioritize reading the highest-risk file paths first (auth, routes, models) before lower-risk ones.
 
 **For Mode C (snippet):** skip the scanner. Reason directly over the pasted code.
 

@@ -16,6 +16,17 @@
 #
 set -uo pipefail
 
+# bash 3.x (stock macOS) does not support declare -A (associative arrays added in bash 4.0).
+# Require bash 4+ and fail early with a clear message rather than dying mid-scan with a
+# cryptic "declare: -A: invalid option" error.
+if (( BASH_VERSINFO[0] < 4 )); then
+  echo "ERROR: scan_patterns.sh requires bash 4+ (you have ${BASH_VERSION})." >&2
+  echo "  macOS ships bash 3.2 for GPL reasons. Install a current bash:" >&2
+  echo "    brew install bash" >&2
+  echo "  Then invoke with the full path: /opt/homebrew/bin/bash $0 ..." >&2
+  exit 1
+fi
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_JSON="$SCRIPT_DIR/../../../.claude-plugin/plugin.json"
 
@@ -47,6 +58,10 @@ else
   echo "NOTE: ripgrep (rg) not found. Falling back to grep. Install ripgrep for faster, more accurate scanning." >&2
 fi
 
+# Exclusion globs/flags for directory-wide scans only.
+# In PR/diff mode (explicit FILES passed), exclusions are NOT applied: the files were already
+# scoped by the caller. Applying --glob '!env/' to an explicit path like backend/env/config.py
+# silently drops it from results. Grep's --exclude-dir similarly only affects recursive traversal.
 COMMON_EXCLUDES_RG=(--glob '!node_modules' --glob '!vendor' --glob '!dist' --glob '!build'
                     --glob '!.git' --glob '!*.min.js' --glob '!*.lock' --glob '!coverage'
                     --glob '!__pycache__' --glob '!*.pyc' --glob '!.venv' --glob '!env/')
@@ -57,15 +72,23 @@ COMMON_EXCLUDES_GREP=(--exclude-dir=node_modules --exclude-dir=vendor --exclude-
                       --exclude='*.min.js' --exclude='*.lock' --exclude='*.pyc')
 
 if [ "${#FILES[@]}" -gt 0 ]; then
+  # PR/diff mode: scan only the explicitly listed files, no glob exclusions.
   SCAN_ARGS=("${FILES[@]}")
+  ACTIVE_EXCLUDES_RG=()
+  ACTIVE_EXCLUDES_GREP=()
 else
+  # Directory mode: scan the target tree with exclusions.
   SCAN_ARGS=("$TARGET")
+  ACTIVE_EXCLUDES_RG=("${COMMON_EXCLUDES_RG[@]}")
+  ACTIVE_EXCLUDES_GREP=("${COMMON_EXCLUDES_GREP[@]}")
 fi
 
-# SCAN runs a single pattern search and either prints hits (full mode) or returns count (summary).
-# Args: label pattern [pattern ...]
+# --- Per-category hit counters (bash 4+ associative array) ---
 declare -A CATEGORY_COUNTS
 
+# SCAN: run a single pattern search. In full mode prints hits; always accumulates count.
+# Args: label pattern [pattern ...]
+# Caller must set CURRENT_CATEGORY before calling.
 SCAN() {
   local label="$1"
   shift
@@ -79,15 +102,18 @@ SCAN() {
 
   local output
   if [ "$USE_RG" -eq 1 ]; then
-    output=$(rg --no-heading --line-number --color=never -i "${COMMON_EXCLUDES_RG[@]}" "${rg_args[@]}" "${SCAN_ARGS[@]}" 2>/dev/null || true)
+    output=$(rg --no-heading --line-number --color=never -i \
+      "${ACTIVE_EXCLUDES_RG[@]+"${ACTIVE_EXCLUDES_RG[@]}"}" \
+      "${rg_args[@]}" "${SCAN_ARGS[@]}" 2>/dev/null || true)
   else
-    output=$(grep -rnEi "${COMMON_EXCLUDES_GREP[@]}" "${grep_args[@]}" "${SCAN_ARGS[@]}" 2>/dev/null || true)
+    output=$(grep -rnEi \
+      "${ACTIVE_EXCLUDES_GREP[@]+"${ACTIVE_EXCLUDES_GREP[@]}"}" \
+      "${grep_args[@]}" "${SCAN_ARGS[@]}" 2>/dev/null || true)
   fi
 
   local count
   count=$(echo "$output" | grep -c . || true)
 
-  # Accumulate into category total (caller sets CURRENT_CATEGORY before calling SCAN)
   CATEGORY_COUNTS["${CURRENT_CATEGORY:-other}"]=$(( ${CATEGORY_COUNTS["${CURRENT_CATEGORY:-other}"]:-0} + count ))
 
   if [ "$EMIT" = "full" ]; then
